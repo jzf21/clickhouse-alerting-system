@@ -1,0 +1,20 @@
+listen_addr: ":8080"
+
+clickhouse:
+  dsn: "clickhouse://default:@localhost:9000/default"
+  max_open_conns: 5
+
+sqlite:
+  path: "./alerting.db"
+
+evaluation:
+  default_interval: 60s
+  query_timeout: 30s
+  max_concurrent: 10
+
+notifications:
+  repeat_interval: 4h
+
+log:
+  level: info
+  format: json

@@ -1,0 +1,16 @@
+# Binary
+clickhouse-alerting-system
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
+# Config with credentials
+config.yaml
+
+# Go
+cmd/chquery/
+
+# OS
+.DS_Store

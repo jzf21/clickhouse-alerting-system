@@ -108,8 +108,14 @@ async function editRule(id) {
   showRuleForm(r);
 }
 
-function showRuleForm(r) {
+async function showRuleForm(r) {
   const isEdit = !!r;
+  const selectedIds = isEdit ? (r.channel_ids || []) : [];
+  let channels = [];
+  try { channels = await api('/api/channels'); } catch(e) {}
+  const channelsHtml = channels.length
+    ? channels.map(c => `<label class="channel-option"><input type="checkbox" value="${c.id}" ${selectedIds.includes(c.id) ? 'checked' : ''}> ${esc(c.name)} <span class="channel-type">(${c.type})</span></label>`).join('')
+    : '<div class="text-muted">No channels configured yet</div>';
   showModal(isEdit ? 'Edit Rule' : 'New Rule', `
     <div class="form-group"><label>Name</label><input id="rf-name" value="${isEdit ? esc(r.name) : ''}"></div>
     <div class="form-group"><label>Query (SQL)</label><textarea id="rf-query">${isEdit ? esc(r.query) : ''}</textarea></div>
@@ -134,7 +140,7 @@ function showRuleForm(r) {
       <div class="form-group"><label>For Duration (seconds)</label><input type="number" id="rf-for" value="${isEdit ? r.for_duration : 0}"></div>
     </div>
     <div class="form-group"><label>Labels (JSON)</label><textarea id="rf-labels">${isEdit ? JSON.stringify(r.labels || {}, null, 2) : '{}'}</textarea></div>
-    <div class="form-group"><label>Channel IDs (JSON array)</label><textarea id="rf-channels">${isEdit ? JSON.stringify(r.channel_ids || [], null, 2) : '[]'}</textarea></div>
+    <div class="form-group"><label>Channels</label><div id="rf-channels" class="channel-checklist">${channelsHtml}</div></div>
     <div class="form-actions">
       <button class="btn btn-primary" onclick="saveRule(${isEdit ? `'${r.id}'` : 'null'})">${isEdit ? 'Update' : 'Create'}</button>
       <button class="btn" onclick="hideModal()">Cancel</button>
@@ -153,7 +159,7 @@ async function saveRule(id) {
     eval_interval: parseInt(document.getElementById('rf-interval').value),
     for_duration: parseInt(document.getElementById('rf-for').value),
     labels: JSON.parse(document.getElementById('rf-labels').value),
-    channel_ids: JSON.parse(document.getElementById('rf-channels').value),
+    channel_ids: [...document.querySelectorAll('#rf-channels input[type="checkbox"]:checked')].map(cb => cb.value),
     enabled: true,
   };
   if (id) {

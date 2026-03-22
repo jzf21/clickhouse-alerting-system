@@ -235,3 +235,36 @@ tr:last-child td {
 .status-dot-firing { background: var(--danger); }
 .status-dot-pending { background: var(--warning); }
 .status-dot-inactive { background: var(--text-muted); }
+
+.channel-checklist {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.5rem;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.channel-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.25rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  border-radius: 3px;
+}
+
+.channel-option:hover {
+  background: var(--surface2);
+}
+
+.channel-option input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--primary);
+}
+
+.channel-type {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}

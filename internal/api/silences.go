@@ -10,7 +10,14 @@ import (
 )
 
 func (s *Server) listSilences(w http.ResponseWriter, r *http.Request) {
-	silences, err := s.store.ListSilences(r.Context())
+	connID := r.URL.Query().Get("connection_id")
+	var silences []model.Silence
+	var err error
+	if connID != "" {
+		silences, err = s.store.ListSilencesByConnection(r.Context(), connID)
+	} else {
+		silences, err = s.store.ListSilences(r.Context())
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

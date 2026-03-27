@@ -8,7 +8,14 @@ import (
 )
 
 func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request) {
-	alerts, err := s.store.ListAlertStates(r.Context())
+	connID := r.URL.Query().Get("connection_id")
+	var alerts []model.AlertWithRule
+	var err error
+	if connID != "" {
+		alerts, err = s.store.ListAlertStatesByConnection(r.Context(), connID)
+	} else {
+		alerts, err = s.store.ListAlertStates(r.Context())
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -21,6 +28,7 @@ func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listAlertHistory(w http.ResponseWriter, r *http.Request) {
 	ruleID := r.URL.Query().Get("rule_id")
+	connID := r.URL.Query().Get("connection_id")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
@@ -28,7 +36,13 @@ func (s *Server) listAlertHistory(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 
-	events, err := s.store.ListEvents(r.Context(), ruleID, limit, offset)
+	var events []model.AlertEvent
+	var err error
+	if connID != "" && ruleID == "" {
+		events, err = s.store.ListEventsByConnection(r.Context(), connID, limit, offset)
+	} else {
+		events, err = s.store.ListEvents(r.Context(), ruleID, limit, offset)
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

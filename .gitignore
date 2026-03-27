@@ -12,5 +12,9 @@ config.yaml
 # Go
 cmd/chquery/
 
+# Node
+ui/node_modules/
+ui/dist/
+
 # OS
 .DS_Store

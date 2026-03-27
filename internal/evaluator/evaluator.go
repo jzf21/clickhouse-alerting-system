@@ -2,13 +2,13 @@ package evaluator
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jozef/clickhouse-alerting-system/internal/connregistry"
 	"github.com/jozef/clickhouse-alerting-system/internal/model"
 	"github.com/jozef/clickhouse-alerting-system/internal/store"
 )
@@ -18,7 +18,7 @@ type NotifyFunc func(ctx context.Context, rule model.AlertRule, state model.Aler
 
 type Evaluator struct {
 	store        store.Store
-	chDB         *sql.DB
+	connRegistry *connregistry.Registry
 	queryTimeout time.Duration
 	sem          chan struct{}
 	notifyFn     NotifyFunc
@@ -34,10 +34,10 @@ type ruleTicker struct {
 	cancel context.CancelFunc
 }
 
-func New(st store.Store, chDB *sql.DB, queryTimeout time.Duration, maxConcurrent int, repeatInterval time.Duration, notifyFn NotifyFunc) *Evaluator {
+func New(st store.Store, registry *connregistry.Registry, queryTimeout time.Duration, maxConcurrent int, repeatInterval time.Duration, notifyFn NotifyFunc) *Evaluator {
 	return &Evaluator{
 		store:        st,
-		chDB:         chDB,
+		connRegistry: registry,
 		queryTimeout: queryTimeout,
 		sem:          make(chan struct{}, maxConcurrent),
 		notifyFn:     notifyFn,
@@ -256,11 +256,20 @@ func (e *Evaluator) onResolved(ctx context.Context, rule model.AlertRule, state 
 }
 
 func (e *Evaluator) runQuery(ctx context.Context, rule model.AlertRule) (float64, error) {
+	if rule.ConnectionID == "" {
+		return 0, fmt.Errorf("rule %q has no connection_id configured", rule.Name)
+	}
+
+	db, err := e.connRegistry.Get(ctx, rule.ConnectionID)
+	if err != nil {
+		return 0, fmt.Errorf("getting connection for rule %q: %w", rule.Name, err)
+	}
+
 	queryCtx, cancel := context.WithTimeout(ctx, e.queryTimeout)
 	defer cancel()
 
 	var value float64
-	row := e.chDB.QueryRowContext(queryCtx, rule.Query)
+	row := db.QueryRowContext(queryCtx, rule.Query)
 	if err := row.Scan(&value); err != nil {
 		return 0, fmt.Errorf("scanning query result for column %q: %w", rule.Column, err)
 	}

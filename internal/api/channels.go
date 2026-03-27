@@ -11,7 +11,14 @@ import (
 )
 
 func (s *Server) listChannels(w http.ResponseWriter, r *http.Request) {
-	channels, err := s.store.ListChannels(r.Context())
+	connID := r.URL.Query().Get("connection_id")
+	var channels []model.NotificationChannel
+	var err error
+	if connID != "" {
+		channels, err = s.store.ListChannelsByConnection(r.Context(), connID)
+	} else {
+		channels, err = s.store.ListChannels(r.Context())
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -102,6 +109,9 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	if update.Config == nil {
 		update.Config = existing.Config
+	}
+	if update.ConnectionID == nil {
+		update.ConnectionID = existing.ConnectionID
 	}
 
 	if err := s.store.UpdateChannel(r.Context(), update); err != nil {

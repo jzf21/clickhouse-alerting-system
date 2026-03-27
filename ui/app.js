@@ -20,6 +20,7 @@ function loadTab(tab) {
     case 'history': historyOffset = 0; loadHistory(); break;
     case 'silences': loadSilences(); break;
     case 'channels': loadChannels(); break;
+    case 'connections': loadConnections(); break;
   }
 }
 
@@ -71,16 +72,19 @@ function silenceAlert(ruleName) {
 
 // Rules
 async function loadRules() {
-  const rules = await api('/api/rules');
+  const [rules, connections] = await Promise.all([api('/api/rules'), api('/api/connections').catch(() => [])]);
+  const connMap = {};
+  (connections || []).forEach(c => connMap[c.id] = c.name);
   const el = document.getElementById('rules-table');
   if (!rules.length) {
     el.innerHTML = '<div class="empty">No rules configured</div>';
     return;
   }
   el.innerHTML = `<table>
-    <thead><tr><th>Name</th><th>Severity</th><th>Condition</th><th>Interval</th><th>Enabled</th><th>Actions</th></tr></thead>
+    <thead><tr><th>Name</th><th>Connection</th><th>Severity</th><th>Condition</th><th>Interval</th><th>Enabled</th><th>Actions</th></tr></thead>
     <tbody>${rules.map(r => `<tr>
       <td>${esc(r.name)}</td>
+      <td>${r.connection_id ? esc(connMap[r.connection_id] || 'Unknown') : '<span class="text-muted">None</span>'}</td>
       <td><span class="badge badge-${r.severity}">${r.severity}</span></td>
       <td><code>${esc(r.column)} ${opSym(r.operator)} ${r.threshold}</code></td>
       <td>${r.eval_interval}s</td>
@@ -113,11 +117,22 @@ async function showRuleForm(r) {
   const selectedIds = isEdit ? (r.channel_ids || []) : [];
   let channels = [];
   try { channels = await api('/api/channels'); } catch(e) {}
+  let connections = [];
+  try { connections = await api('/api/connections'); } catch(e) {}
   const channelsHtml = channels.length
     ? channels.map(c => `<label class="channel-option"><input type="checkbox" value="${c.id}" ${selectedIds.includes(c.id) ? 'checked' : ''}> ${esc(c.name)} <span class="channel-type">(${c.type})</span></label>`).join('')
     : '<div class="text-muted">No channels configured yet</div>';
+  const connectionsHtml = connections.length
+    ? connections.filter(c => c.enabled).map(c => `<option value="${c.id}" ${isEdit && r.connection_id === c.id ? 'selected' : ''}>${esc(c.name)} (${esc(c.host)}:${c.port}/${esc(c.database)})</option>`).join('')
+    : '';
   showModal(isEdit ? 'Edit Rule' : 'New Rule', `
     <div class="form-group"><label>Name</label><input id="rf-name" value="${isEdit ? esc(r.name) : ''}"></div>
+    <div class="form-group"><label>ClickHouse Connection</label>
+      <select id="rf-connection">
+        <option value="">-- Select Connection --</option>
+        ${connectionsHtml}
+      </select>
+    </div>
     <div class="form-group"><label>Query (SQL)</label><textarea id="rf-query">${isEdit ? esc(r.query) : ''}</textarea></div>
     <div class="form-row">
       <div class="form-group"><label>Column</label><input id="rf-column" value="${isEdit ? esc(r.column) : ''}"></div>
@@ -160,6 +175,7 @@ async function saveRule(id) {
     for_duration: parseInt(document.getElementById('rf-for').value),
     labels: JSON.parse(document.getElementById('rf-labels').value),
     channel_ids: [...document.querySelectorAll('#rf-channels input[type="checkbox"]:checked')].map(cb => cb.value),
+    connection_id: document.getElementById('rf-connection').value,
     enabled: true,
   };
   if (id) {
@@ -342,6 +358,100 @@ async function deleteChannel(id) {
   if (!confirm('Delete this channel?')) return;
   await api(`/api/channels/${id}`, { method: 'DELETE' });
   loadChannels();
+}
+
+// Connections
+async function loadConnections() {
+  const conns = await api('/api/connections');
+  const el = document.getElementById('connections-table');
+  if (!conns.length) {
+    el.innerHTML = '<div class="empty">No connections configured</div>';
+    return;
+  }
+  el.innerHTML = `<table>
+    <thead><tr><th>Name</th><th>Host</th><th>Port</th><th>Database</th><th>Enabled</th><th>Actions</th></tr></thead>
+    <tbody>${conns.map(c => `<tr>
+      <td>${esc(c.name)}</td>
+      <td>${esc(c.host)}</td>
+      <td>${c.port}</td>
+      <td>${esc(c.database)}</td>
+      <td>${c.enabled ? 'Yes' : 'No'}</td>
+      <td class="actions">
+        <button class="btn btn-sm btn-success" onclick="testConnectionBtn('${c.id}')">Test</button>
+        <button class="btn btn-sm btn-primary" onclick="editConnection('${c.id}')">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteConnection('${c.id}')">Delete</button>
+      </td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+function showConnectionForm(c) {
+  const isEdit = !!c;
+  showModal(isEdit ? 'Edit Connection' : 'New Connection', `
+    <div class="form-group"><label>Name</label><input id="cc-name" value="${isEdit ? esc(c.name) : ''}"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Host</label><input id="cc-host" value="${isEdit ? esc(c.host) : ''}"></div>
+      <div class="form-group"><label>Port</label><input type="number" id="cc-port" value="${isEdit ? c.port : 9000}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Database</label><input id="cc-database" value="${isEdit ? esc(c.database) : 'default'}"></div>
+      <div class="form-group"><label>Username</label><input id="cc-username" value="${isEdit ? esc(c.username) : 'default'}"></div>
+    </div>
+    <div class="form-group"><label>Password</label><input type="password" id="cc-password" value="${isEdit ? esc(c.password) : ''}"></div>
+    <div class="form-row">
+      <div class="form-group"><label><input type="checkbox" id="cc-secure" ${isEdit && c.secure ? 'checked' : ''}> Secure (TLS)</label></div>
+      <div class="form-group"><label>Max Open Conns</label><input type="number" id="cc-maxconns" value="${isEdit ? c.max_open_conns : 5}"></div>
+    </div>
+    <div class="form-group"><label><input type="checkbox" id="cc-enabled" ${!isEdit || c.enabled ? 'checked' : ''}> Enabled</label></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="saveConnection(${isEdit ? `'${c.id}'` : 'null'})">${isEdit ? 'Update' : 'Create'}</button>
+      <button class="btn" onclick="hideModal()">Cancel</button>
+    </div>
+  `);
+}
+
+async function editConnection(id) {
+  const c = await api(`/api/connections/${id}`);
+  showConnectionForm(c);
+}
+
+async function saveConnection(id) {
+  const body = {
+    name: document.getElementById('cc-name').value,
+    host: document.getElementById('cc-host').value,
+    port: parseInt(document.getElementById('cc-port').value),
+    database: document.getElementById('cc-database').value,
+    username: document.getElementById('cc-username').value,
+    password: document.getElementById('cc-password').value,
+    secure: document.getElementById('cc-secure').checked,
+    max_open_conns: parseInt(document.getElementById('cc-maxconns').value),
+    enabled: document.getElementById('cc-enabled').checked,
+  };
+  if (id) {
+    await api(`/api/connections/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+  } else {
+    await api('/api/connections', { method: 'POST', body: JSON.stringify(body) });
+  }
+  hideModal();
+  loadConnections();
+}
+
+async function testConnectionBtn(id) {
+  const result = await api(`/api/connections/${id}/test`, { method: 'POST' });
+  if (result && result.error) {
+    alert('Test failed: ' + result.error);
+  } else {
+    alert('Connection test successful!');
+  }
+}
+
+async function deleteConnection(id) {
+  if (!confirm('Delete this connection?')) return;
+  const result = await api(`/api/connections/${id}`, { method: 'DELETE' });
+  if (result && result.error) {
+    alert('Cannot delete: ' + result.error);
+    return;
+  }
+  loadConnections();
 }
 
 // Modal

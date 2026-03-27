@@ -11,7 +11,14 @@ import (
 )
 
 func (s *Server) listRules(w http.ResponseWriter, r *http.Request) {
-	rules, err := s.store.ListRules(r.Context())
+	connID := r.URL.Query().Get("connection_id")
+	var rules []model.AlertRule
+	var err error
+	if connID != "" {
+		rules, err = s.store.ListRulesByConnection(r.Context(), connID)
+	} else {
+		rules, err = s.store.ListRules(r.Context())
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -78,6 +85,13 @@ func (s *Server) createRule(w http.ResponseWriter, r *http.Request) {
 		rule.ChannelIDs = json.RawMessage(`[]`)
 	}
 
+	if rule.ConnectionID != "" {
+		if _, err := s.store.GetConnection(r.Context(), rule.ConnectionID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid connection_id: "+err.Error())
+			return
+		}
+	}
+
 	if err := s.store.CreateRule(r.Context(), rule); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -128,6 +142,16 @@ func (s *Server) updateRule(w http.ResponseWriter, r *http.Request) {
 	}
 	if update.ChannelIDs == nil {
 		update.ChannelIDs = existing.ChannelIDs
+	}
+	if update.ConnectionID == "" {
+		update.ConnectionID = existing.ConnectionID
+	}
+
+	if update.ConnectionID != "" {
+		if _, err := s.store.GetConnection(r.Context(), update.ConnectionID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid connection_id: "+err.Error())
+			return
+		}
 	}
 
 	if err := s.store.UpdateRule(r.Context(), update); err != nil {

@@ -2,6 +2,8 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -18,6 +20,7 @@ type AlertRule struct {
 	Labels       json.RawMessage `json:"labels"`
 	Annotations  json.RawMessage `json:"annotations"`
 	ChannelIDs   json.RawMessage `json:"channel_ids"`
+	ConnectionID string          `json:"connection_id"`
 	Enabled      bool            `json:"enabled"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
@@ -47,13 +50,14 @@ type AlertEvent struct {
 }
 
 type Silence struct {
-	ID        string          `json:"id"`
-	Matchers  json.RawMessage `json:"matchers"` // [{label, value, is_regex}]
-	Comment   string          `json:"comment"`
-	CreatedBy string          `json:"created_by"`
-	StartsAt  time.Time       `json:"starts_at"`
-	EndsAt    time.Time       `json:"ends_at"`
-	CreatedAt time.Time       `json:"created_at"`
+	ID           string          `json:"id"`
+	Matchers     json.RawMessage `json:"matchers"` // [{label, value, is_regex}]
+	Comment      string          `json:"comment"`
+	CreatedBy    string          `json:"created_by"`
+	StartsAt     time.Time       `json:"starts_at"`
+	EndsAt       time.Time       `json:"ends_at"`
+	ConnectionID *string         `json:"connection_id,omitempty"` // nil = global
+	CreatedAt    time.Time       `json:"created_at"`
 }
 
 type LabelMatcher struct {
@@ -63,13 +67,14 @@ type LabelMatcher struct {
 }
 
 type NotificationChannel struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Type      string          `json:"type"` // slack, webhook
-	Config    json.RawMessage `json:"config"`
-	Enabled   bool            `json:"enabled"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Type         string          `json:"type"` // slack, webhook
+	Config       json.RawMessage `json:"config"`
+	ConnectionID *string         `json:"connection_id,omitempty"` // nil = global
+	Enabled      bool            `json:"enabled"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 type SlackConfig struct {
@@ -84,11 +89,37 @@ type WebhookConfig struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
+type ClickHouseConnection struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Host         string    `json:"host"`
+	Port         int       `json:"port"`
+	Database     string    `json:"database"`
+	Username     string    `json:"username"`
+	Password     string    `json:"password,omitempty"`
+	Secure       bool      `json:"secure"`
+	MaxOpenConns int       `json:"max_open_conns"`
+	Enabled      bool      `json:"enabled"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func (c ClickHouseConnection) DSN() string {
+	dsn := fmt.Sprintf("clickhouse://%s:%s@%s:%d/%s",
+		url.PathEscape(c.Username), url.PathEscape(c.Password),
+		c.Host, c.Port, c.Database)
+	if c.Secure {
+		dsn += "?secure=true"
+	}
+	return dsn
+}
+
 // AlertWithRule combines alert state with its rule for display.
 type AlertWithRule struct {
 	AlertState
-	RuleName    string          `json:"rule_name"`
-	Severity    string          `json:"severity"`
-	Labels      json.RawMessage `json:"labels"`
-	Annotations json.RawMessage `json:"annotations"`
+	RuleName     string          `json:"rule_name"`
+	Severity     string          `json:"severity"`
+	Labels       json.RawMessage `json:"labels"`
+	Annotations  json.RawMessage `json:"annotations"`
+	ConnectionID string          `json:"connection_id"`
 }

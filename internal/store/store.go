@@ -38,4 +38,18 @@ type Store interface {
 	CreateChannel(ctx context.Context, ch model.NotificationChannel) error
 	UpdateChannel(ctx context.Context, ch model.NotificationChannel) error
 	DeleteChannel(ctx context.Context, id string) error
+
+	// ClickHouse Connections
+	ListConnections(ctx context.Context) ([]model.ClickHouseConnection, error)
+	GetConnection(ctx context.Context, id string) (model.ClickHouseConnection, error)
+	CreateConnection(ctx context.Context, conn model.ClickHouseConnection) error
+	UpdateConnection(ctx context.Context, conn model.ClickHouseConnection) error
+	DeleteConnection(ctx context.Context, id string) error
+
+	// Filtered by connection
+	ListRulesByConnection(ctx context.Context, connectionID string) ([]model.AlertRule, error)
+	ListChannelsByConnection(ctx context.Context, connectionID string) ([]model.NotificationChannel, error)
+	ListSilencesByConnection(ctx context.Context, connectionID string) ([]model.Silence, error)
+	ListAlertStatesByConnection(ctx context.Context, connectionID string) ([]model.AlertWithRule, error)
+	ListEventsByConnection(ctx context.Context, connectionID string, limit, offset int) ([]model.AlertEvent, error)
 }
